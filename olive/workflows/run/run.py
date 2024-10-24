@@ -8,7 +8,7 @@ import subprocess
 import sys
 from copy import deepcopy
 from pathlib import Path
-from typing import Generator, List, Optional, Union
+from typing import List, Optional, Union
 
 from olive.auto_optimizer import AutoOptimizer
 from olive.common.utils import set_tempdir
@@ -171,13 +171,10 @@ def run_engine(package_config: OlivePackageConfig, run_config: RunConfig):
         and run_config.auto_optimizer_config is not None
         and not run_config.auto_optimizer_config.disable_auto_optimizer
     )
-    if auto_optimizer_enabled:
-        is_ep_required = True
-    else:
-        is_ep_required = is_execution_provider_required(run_config, package_config)
+    is_ep_required = auto_optimizer_enabled or is_execution_provider_required(run_config, package_config)
 
     # Register passes since we need to know whether they need to run on target
-    used_passes = list(get_used_passes(run_config))
+    used_passes = get_used_passes(run_config)
     for pass_config in used_passes:
         logger.debug("Registering pass %s", pass_config.type)
         package_config.import_pass_module(pass_config.type)
@@ -231,19 +228,9 @@ def run_engine(package_config: OlivePackageConfig, run_config: RunConfig):
     # to remove engine level loop and pass the accelerator_specs to the engine directly.
     for accelerator_spec, (passes, pass_flows) in zip(acc_list, pass_list):
         engine.reset_passes()
-        pass_flows_to_run = {p for ps in pass_flows for p in ps} if pass_flows else set(passes.keys())
-        # First pass registers the necessary module implementation
-        for pass_name in pass_flows_to_run:
-            pass_config = passes[pass_name]
-            if pass_config.type.lower() in Pass.registry:
-                logger.debug("Pass %s already registered", pass_config.type)
-            else:
-                logger.debug("Registering pass %s", pass_config.type)
-                package_config.import_pass_module(pass_config.type)
-
-        # Second pass, initializes the pass and registers it with the engine
+        passes_to_run = {p for ps in pass_flows for p in ps} if pass_flows else set(passes.keys())
         for pass_name, pass_config in passes.items():
-            if pass_name in pass_flows_to_run:
+            if pass_name in passes_to_run:
                 host = pass_config.host.create_system() if pass_config.host is not None else None
                 engine.register(
                     Pass.registry[pass_config.type.lower()],
@@ -386,13 +373,15 @@ def get_local_ort_packages() -> List[str]:
     return local_ort_packages
 
 
-def get_used_passes(run_config: RunConfig) -> Generator["RunPassConfig", None, None]:
+def get_used_passes(run_config: RunConfig) -> List[RunPassConfig]:
     if run_config.pass_flows:
-        passes = set()
-        for pass_flow in run_config.pass_flows:
-            for pass_name in pass_flow:
-                if run_config.passes[pass_name].type not in passes:
-                    passes.add(run_config.passes[pass_name].type)
-                    yield run_config.passes[pass_name]
+        return [
+            pass_
+            for pass_flow in run_config.pass_flows
+            for pass_name in pass_flow
+            for pass_ in run_config.passes[pass_name]
+        ]
     elif run_config.passes:
-        yield from run_config.passes.values()
+        return [pass_ for passes in run_config.passes.values() for pass_ in passes]
+
+    return []

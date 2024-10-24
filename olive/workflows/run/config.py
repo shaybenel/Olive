@@ -135,7 +135,7 @@ class RunConfig(NestedConfig):
             " no-search or auto-optimizer mode based on whether passes field is provided."
         ),
     )
-    passes: Dict[str, RunPassConfig] = Field(None, description="Pass configurations.")
+    passes: Dict[str, List[RunPassConfig]] = Field(None, description="Pass configurations.")
     pass_flows: List[List[str]] = Field(
         None,
         description=(
@@ -234,6 +234,13 @@ class RunConfig(NestedConfig):
     def validate_engine(cls, v, values):
         v = _resolve_system(v, values, "host")
         v = _resolve_system(v, values, "target")
+
+        if v["search_strategy"] and not v["evaluator_config"]:
+            raise ValueError(
+                "Can't search without a valid evaluator config. "
+                "Either provider a valid evaluator config or disable search."
+            )
+
         return _resolve_evaluator(v, values)
 
     @validator("passes", pre=True, each_item=True)
@@ -246,25 +253,27 @@ class RunConfig(NestedConfig):
         if "engine" not in values:
             raise ValueError("Invalid engine")
 
-        # validate first to gather config params
-        v = validate_config(v, RunPassConfig).dict()
+        v = v if isinstance(v, list) else [v]
+        for i in range(len(v)):
+            iv = v[i]
 
-        if not v.get("config"):
-            return v
+            # validate first to gather config params
+            iv = validate_config(iv, RunPassConfig).dict()
 
-        searchable_configs = set()
-        for param_name in v["config"]:
-            if v["config"][param_name] == PassParamDefault.SEARCHABLE_VALUES:
-                searchable_configs.add(param_name)
-            if param_name.endswith("data_config"):
-                v["config"] = _resolve_data_config(v["config"], values, param_name)
+            if iv.get("config"):
+                searchable_configs = set()
+                for param_name in iv["config"]:
+                    if iv["config"][param_name] == PassParamDefault.SEARCHABLE_VALUES:
+                        searchable_configs.add(param_name)
+                    if param_name.endswith("data_config"):
+                        iv["config"] = _resolve_data_config(iv["config"], values, param_name)
 
-        if not values["engine"].search_strategy and searchable_configs:
-            raise ValueError(
-                f"You cannot disable search for {v['type']} and"
-                f" set {searchable_configs} to SEARCHABLE_VALUES at the same time."
-                " Please remove SEARCHABLE_VALUES or enable search(needs search strategy configs)."
-            )
+                if not values["engine"].search_strategy and searchable_configs:
+                    raise ValueError(
+                        f"You cannot disable search for {iv['type']} and"
+                        f" set {searchable_configs} to SEARCHABLE_VALUES at the same time."
+                        " Please remove SEARCHABLE_VALUES or enable search (needs search strategy configs)."
+                    )
         return v
 
     @validator("workflow_host", pre=True)
