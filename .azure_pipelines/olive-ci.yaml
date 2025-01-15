@@ -64,7 +64,6 @@ jobs:
     pool: $(OLIVE_POOL_UBUNTU2004_GPU_V100)
     test_type: 'unit_test'
     device: 'gpu'
-    dockerfile: '.azure_pipelines/dockerfiles/linux-gpu.dockerfile'
     onnxruntime: onnxruntime-gpu==1.19.2
     requirements_file: 'requirements-test-gpu.txt'
 

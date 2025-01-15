@@ -15,7 +15,7 @@ variables:
 
 jobs:
 # Linux unit test
-- template: job_templates/olive-test-linux-template.yaml
+- template: job_templates/olive-test-cpu-template.yaml
   parameters:
     name: Linux_CI_Unit_Test_Olive
     pool: $(OLIVE_POOL_UBUNTU2004)
@@ -26,13 +26,15 @@ jobs:
     onnxruntime_nightly: true
 
 # Linux GPU unit test
-- template: job_templates/olive-test-linux-template.yaml
+- template: job_templates/olive-test-linux-gpu-template.yaml
   parameters:
     name: Linux_GPU_CI_Unit_Test_Olive
     pool: $(OLIVE_POOL_UBUNTU2004_GPU_V100)
     device: 'gpu'
     windows: False
     test_type: 'unit_test'
+    base_image: 'nvidia/cuda:12.6.3-cudnn-devel-ubuntu22.04'
+    trt_version: '10.5.0.18-1+cuda12.6'
     onnxruntime: onnxruntime-gpu
     onnxruntime_nightly: true
     requirements_file: 'requirements-test-gpu.txt'
