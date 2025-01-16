@@ -32,7 +32,7 @@ def get_dlc_info(dlc_path: str, csv_path: str = None) -> str:
         cmd += f" -s {csv_path}"
     stdout, _ = SNPERunner(use_dev_tools=True).run(cmd)
 
-    prefix = "DLC info for:"
+    prefix = "DLC info of:"
     return prefix + stdout.split(prefix)[1]
 
 
